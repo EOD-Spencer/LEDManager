@@ -5,39 +5,41 @@ import argparse
 from ledcontrol.app import create_app
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='LED Controller host for browser-controlled LEDs. The primary consolidated path is USB serial -> Arduino -> SK6812 RGBW.'
+    )
     parser.add_argument('--port', type=int, default=80,
                         help='Port to use for web interface. Default: 80')
     parser.add_argument('--host', default='0.0.0.0',
-                        help='Hostname to use for web interface. Default: 0.0.0.0')
+                        help='Address to bind the web interface to. Default: 0.0.0.0 (all interfaces; no built-in authentication)')
     parser.add_argument('--led_count', type=int, default=0,
-                        help='Number of LEDs')
+                        help='Total logical LED count. For a single Arduino strip, match firmware LED_COUNT.')
     parser.add_argument('--config_file',
-                        help='Location of config file. Default: /etc/ledcontrol.json')
+                        help='Settings JSON path. Inherited default: /etc/ledcontrol.json. A writable explicit path such as ./ledcontrol.json is recommended.')
     parser.add_argument('--pixel_mapping_json', type=argparse.FileType('r'),
-                        help='JSON file containing pixel mapping (see README)')
+                        help='Optional JSON file containing pixel mapping for non-linear/2D/3D layouts')
     parser.add_argument('--fps', type=int, default=60,
-                        help='Refresh rate limit for LEDs, in FPS. Default: 60')
+                        help='Host animation/render refresh-rate limit in FPS. Default: 60')
     parser.add_argument('--led_pin', type=int, default=18,
-                        help='Pin for LEDs (see https://github.com/jgarff/rpi_ws281x). Default: 18')
+                        help='Raspberry Pi direct-output GPIO only. Ignored by Arduino serial rendering. Default: 18')
     parser.add_argument('--led_data_rate', type=int, default=800000,
-                        help='Data rate for LEDs. Default: 800000 Hz')
+                        help='Raspberry Pi direct-output LED data rate only. Ignored by Arduino serial rendering. Default: 800000 Hz')
     parser.add_argument('--led_dma_channel', type=int, default=10,
-                        help='DMA channel for LEDs. DO NOT USE CHANNEL 5 ON Pi 3 B. Default: 10')
+                        help='Raspberry Pi direct-output DMA channel only. Ignored by Arduino serial rendering. Default: 10')
     parser.add_argument('--led_pixel_order', default='GRB',
-                        help='LED color channel order. Any combination of RGB with or without a W at the end. Default: GRB, try GRBW for SK6812')
+                        help='Raspberry Pi direct-output color order only. Arduino color order is PIXEL_TYPE in the sketch. Default: GRB')
     parser.add_argument('--led_brightness_limit', type=float, default=1.0,
-                        help='LED maximum brightness limit for the web UI. Float from 0.0-1.0. Default: 1.0')
+                        help='LED maximum brightness exposed by the web UI. Float from 0.0-1.0. Default: 1.0')
     parser.add_argument('--save_interval', type=int, default=60,
                         help='Interval for automatically saving settings in seconds. Default: 60')
     parser.add_argument('--sacn', action='store_true',
-                        help='Enable sACN / E1.31 support. Default: False')
+                        help='Enable inherited sACN / E1.31 support. Default: False')
     parser.add_argument('--hap', action='store_true',
-                        help='Enable HomeKit Accessory Protocol support. Default: False')
+                        help='Enable inherited HomeKit Accessory Protocol support. Default: False')
     parser.add_argument('--no_timer_reset', action='store_true',
                         help='Do not reset the animation timer when patterns are changed. Default: False')
     parser.add_argument('--dev', action='store_true',
-                        help='Development flag. Default: False')
+                        help='Use the Flask development server instead of bjoern. Needed for normal Windows/macOS operation with current dependencies.')
     args = parser.parse_args()
 
     app = create_app(args.led_count,

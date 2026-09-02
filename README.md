@@ -1,123 +1,168 @@
 # LED Controller
 
-A single web-controlled RGBW LED system combining the useful parts of the former **LEDManager** and **ArduinoLEDController** projects.
+`EOD-Spencer/LEDManager` is the single source of truth for the LED Controller system. It contains both the browser-based LED Manager host application and the Arduino firmware that drives the physical RGBW LEDs.
 
-The browser application renders animations, palettes, brightness, saturation, presets, and LED groups. An Arduino connected by USB receives those rendered frames and drives an SK6812 RGBW strip.
-
-## Architecture
+The supported primary architecture is:
 
 ```text
-Browser
-   |
-   v
-LED Controller web app
-   |
-   | USB serial @ 115200 baud
-   v
-Arduino Uno
-   |
-   v
+Browser / phone
+      |
+      v
+LED Controller host application
+      |
+      | USB serial @ 115200 baud
+      v
+Arduino Uno or compatible
+      |
+      v
 SK6812 RGBW LEDs
 ```
 
-There is intentionally only one animation engine. The Arduino firmware does not contain a second set of hard-coded patterns; it renders frames sent by the host application.
+The host owns animations, palettes, brightness, saturation, presets, groups, and timing. The Arduino is intentionally a small renderer: it receives frames from the host and writes them to the LED strip. There is only one animation engine.
 
-## What was consolidated
+> **Current validation status:** the host/firmware protocol has been reconciled in code. A physical Arduino + SK6812 hardware test is still required before the current defaults should be treated as hardware-validated.
 
-This repository replaces two previously separate projects:
+## Documentation
 
-- `LEDManager` supplied the web UI, animation engine, palettes, presets, grouping, and serial rendering protocol.
-- `ArduinoLEDController` supplied the Arduino/SK6812 hardware target.
+- [Arduino firmware and wiring](firmware/ArduinoLEDController/README.md)
+- [Architecture and ownership boundaries](docs/ARCHITECTURE.md)
+- [Host configuration and command-line options](docs/CONFIGURATION.md)
+- [USB serial protocol](docs/PROTOCOL.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Built-in animation previews](animations.md)
+- [License and attribution](NOTICE.md)
 
-The old Arduino warning-light program was not copied into the new firmware because it duplicated animation logic and was not compatible with the web application. The included Arduino firmware implements the existing LED Manager serial protocol directly.
+## Default hardware configuration
 
-## Hardware
+The included Arduino sketch currently assumes:
 
-Default configuration:
-
-- Arduino Uno or compatible
+- Arduino Uno or compatible AVR board
 - SK6812 RGBW LEDs
 - 20 LEDs
-- Arduino digital pin 10 -> LED data input
-- Common ground between Arduino and LED power supply
-- Appropriate 5 V LED power supply
+- LED data on Arduino digital pin 10
+- `NEO_GRBW + NEO_KHZ800`
+- USB serial at 115200 baud
+- common ground between Arduino and LED power supply
+- an external 5 V supply sized appropriately for the LED installation
 
-Do not power a substantial LED installation through the Arduino board. Size wiring, fusing, and the 5 V supply for the actual LED load.
+Do not power a substantial LED installation through the Arduino board. Size the 5 V supply, wiring, connectors, and circuit protection for the actual LED load.
 
-## 1. Flash the Arduino
+## Quick start
 
-The firmware is in:
+### 1. Flash the Arduino
+
+The firmware is:
 
 `firmware/ArduinoLEDController/ArduinoLEDController.ino`
 
-Install **Adafruit NeoPixel** with Arduino Library Manager, verify `LED_COUNT`, `LED_PIN`, and `PIXEL_TYPE`, then compile and upload the sketch.
+Install **Adafruit NeoPixel** through Arduino Library Manager. Before uploading, verify these constants near the top of the sketch:
 
-See `firmware/ArduinoLEDController/README.md` for the hardware-side details.
+```cpp
+static const uint16_t LED_COUNT = 20;
+static const uint8_t LED_PIN = 10;
+static const neoPixelType PIXEL_TYPE = NEO_GRBW + NEO_KHZ800;
+```
 
-## 2. Install the host application
+`LED_COUNT` must match the host's `--led_count` value. See the [firmware README](firmware/ArduinoLEDController/README.md) for wiring and flashing details.
 
-Python 3.7 or newer is required by the existing LED Manager application.
+### 2. Install the host application
+
+Python 3.7 or newer is required by the inherited LED Manager application.
+
+From the repository root:
 
 ```bash
 python -m pip install -e .
 ```
 
-On systems where more than one Python installation is present, use the Python executable you intend to run LED Controller with.
+The package keeps the historical `ledcontrol` command name.
 
-## 3. Start LED Controller
+### 3. Start the host
 
-For the default 20-LED strip:
+Use an explicit writable settings file. This avoids depending on the inherited `/etc/ledcontrol.json` default, which is mainly appropriate to Linux appliance-style installs.
 
 ```bash
-ledcontrol --led_count 20 --port 8080
+ledcontrol --led_count 20 --config_file ./ledcontrol.json --port 8080
 ```
 
-Then open the web interface on the computer running it:
+On Windows or macOS, add `--dev` because the production `bjoern` server is only installed on Linux:
+
+```bash
+ledcontrol --led_count 20 --config_file ./ledcontrol.json --port 8080 --dev
+```
+
+Open:
 
 `http://localhost:8080`
 
-The LED count supplied to the host must match `LED_COUNT` in the Arduino sketch.
+By default the host binds to `0.0.0.0`, which makes the UI reachable from other devices on the same network. There is currently **no built-in authentication**, so only expose it on a trusted network. Use `--host 127.0.0.1` if the UI should only be reachable from the host computer.
 
-## 4. Connect the web app to the Arduino
+### 4. Connect the UI to the Arduino
 
-Open **Setup** in the web interface.
+Open **Setup** in the web interface. For the LED group you want to drive:
 
-For the main LED group:
+- **Render Mode:** `Serial (Arduino / USB LED Controller)`
+- **Serial Port:** the Arduino's USB serial device
+- **Range:** the LEDs assigned to that group; the end value is exclusive
 
-- Set **Render Mode** to `Serial (Arduino / USB LED Controller)`.
-- Set **Render Target** to the Arduino serial port.
-
-Examples:
+Typical serial-port examples:
 
 - Windows: `COM4`
 - Linux: `/dev/ttyACM0`
 - macOS: `/dev/cu.usbmodem...`
 
-Return to **Control** and select a pattern. Brightness, saturation, palettes, animation speed, scale, presets, and group controls are rendered by the host and streamed to the Arduino.
+For a single 20-LED strip, use a range of `0` to `20`.
+
+Return to **Control** and choose a pattern. The host renders frames and streams them to the Arduino.
+
+## Settings and persistence
+
+The host automatically saves controller settings, groups, presets, custom animation changes, and custom palettes. The default save interval is 60 seconds and can be changed with `--save_interval`.
+
+For the consolidated Arduino workflow, an explicit local config path is recommended:
+
+```bash
+--config_file ./ledcontrol.json
+```
+
+If an existing settings file is invalid, the application preserves a copy with an `.error` suffix before starting with defaults. Older settings may be backed up with a `.bak` suffix during migration.
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the complete command-line reference and which arguments apply only to inherited Raspberry Pi direct-output support.
 
 ## RGBW behavior
 
-The host's existing remote-rendering protocol sends RGB or HSV values. The Arduino firmware converts them to RGBW using the same approach as the former Pico firmware, including use of the dedicated white channel when colors are desaturated.
+The existing remote-rendering protocol sends three bytes per logical pixel as RGB or HSV. It does not transmit an independent fourth white byte. The Arduino firmware derives the SK6812 white channel using behavior compatible with the former remote-renderer implementation.
 
-This preserves compatibility with the existing LED Manager UI and animation engine without requiring an immediate protocol rewrite.
+That keeps the existing UI and animation engine compatible with RGBW strips without duplicating effects in the firmware. If fully independent R/G/B/W control is needed later, the serial protocol must be extended.
 
 ## Repository layout
 
 ```text
-firmware/ArduinoLEDController/   Arduino Uno + SK6812 RGBW firmware
+firmware/ArduinoLEDController/   Arduino + SK6812 RGBW firmware
 ledcontrol/                      Python host, web API, animation engine, UI
-img/                             Existing animation previews/documentation assets
-setup.py                         Python package/CLI installation
+docs/                            Architecture, configuration, protocol, troubleshooting
+img/                             Animation preview assets
+animations.md                    Built-in animation preview index
+setup.py                         Python package and CLI metadata
+LICENSE / NOTICE.md              Licensing and upstream attribution
 ```
 
-## Project direction
+## Legacy Raspberry Pi support
 
-The supported primary path for this consolidated project is:
+Direct Raspberry Pi LED output remains in the inherited host code and `rpi_ws281x` submodule for compatibility. It is not the primary hardware path for this consolidated project and was not part of the Arduino consolidation validation pass.
 
-**web UI -> USB serial -> Arduino -> RGBW LEDs**
+The Pico/Pico W external-controller firmware was intentionally removed. New external-controller work should target the Arduino serial implementation unless the project explicitly decides to add another supported hardware target.
 
-Raspberry Pi direct-output support remains in the inherited host code for compatibility, but the included external-controller firmware is now Arduino-focused. Legacy Pico/Pico W firmware has been removed to avoid maintaining multiple hardware implementations in the same project.
+## Project rules
+
+To prevent the two halves from drifting apart again:
+
+1. Host UI/backend and Arduino firmware stay in this repository.
+2. The host remains the source of truth for animations and effects.
+3. Wire-protocol changes must update both host and firmware in the same change.
+4. Any protocol change must also update `docs/PROTOCOL.md`.
+5. Hardware defaults must stay synchronized between the root README, firmware README, and Arduino sketch.
 
 ## License and attribution
 
-This project contains MIT-licensed work originally from `jackw01/led-control` and new/modified work by Cody Spencer. See `LICENSE` and `NOTICE.md`.
+This repository contains MIT-licensed work derived from `jackw01/led-control` plus Arduino firmware and consolidation work by Cody Spencer / EOD-Spencer. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).

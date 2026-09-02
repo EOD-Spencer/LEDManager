@@ -6,4 +6,4 @@ Upstream project: `https://github.com/jackw01/led-control`
 
 The Arduino RGBW firmware and consolidation work are by Cody Spencer / EOD-Spencer.
 
-The former standalone repositories `EOD-Spencer/LEDManager` and `EOD-Spencer/ArduinoLEDController` are being consolidated so that the host UI, serial protocol, and Arduino firmware can be maintained together as one system.
+`EOD-Spencer/LEDManager` is now the consolidated repository and single source of truth for the host UI, animation engine, serial protocol, and Arduino firmware. The former standalone `EOD-Spencer/ArduinoLEDController` repository has been retired.
