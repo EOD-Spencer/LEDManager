@@ -53,20 +53,17 @@ export default {
             Local (Raspberry Pi)
           </option>
           <option value="serial">
-            Serial (Raspberry Pi Pico)
-          </option>
-          <option value="udp">
-            WiFi (Raspberry Pi Pico W)
+            Serial (Arduino / USB LED Controller)
           </option>
         </select>
       </span>
     </div>
     <div class="input-row input-row-bottom-margin" v-if="group.render_mode!='local'">
-      <span class="label select-label">Render Target:</span>
+      <span class="label select-label">Serial Port:</span>
       <input
         type="text"
         autocomplete="off"
-        placeholder="serial port or hostname"
+        placeholder="COM4 or /dev/ttyACM0"
         v-model="group.render_target"
         @change="setTarget"
       >
